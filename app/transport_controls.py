@@ -132,6 +132,15 @@ class TransportControls(QWidget):
         self._out_time_label.setStyleSheet(
             "font-family: monospace; font-size: 11px; color: #FFDC32; min-width: 78px;"
         )
+        dur_lbl = QLabel("間隔:")
+        dur_lbl.setStyleSheet("color: #AADDAA; font-size: 11px;")
+        self._dur_label = QLabel("--:--.---")
+        self._dur_label.setStyleSheet(
+            "font-family: monospace; font-size: 11px; color: #AADDAA; min-width: 78px;"
+        )
+
+        self._in_ms:  int = -1
+        self._out_ms: int = -1
 
         row2.addWidget(cur_label)
         row2.addWidget(self._btn_m1s)
@@ -149,6 +158,8 @@ class TransportControls(QWidget):
         row2.addWidget(self._in_time_label)
         row2.addWidget(out_lbl)
         row2.addWidget(self._out_time_label)
+        row2.addWidget(dur_lbl)
+        row2.addWidget(self._dur_label)
         row2.addStretch()
 
         root.addLayout(row1)
@@ -175,10 +186,20 @@ class TransportControls(QWidget):
         self._time_label.setText(f"{pos} / {dur}")
 
     def update_in_time(self, ms: int) -> None:
+        self._in_ms = ms
         self._in_time_label.setText("--:--.---" if ms < 0 else _ms_precise(ms))
+        self._update_duration()
 
     def update_out_time(self, ms: int) -> None:
+        self._out_ms = ms
         self._out_time_label.setText("--:--.---" if ms < 0 else _ms_precise(ms))
+        self._update_duration()
+
+    def _update_duration(self) -> None:
+        if self._in_ms >= 0 and self._out_ms >= 0 and self._out_ms > self._in_ms:
+            self._dur_label.setText(_ms_precise(self._out_ms - self._in_ms))
+        else:
+            self._dur_label.setText("--:--.---")
 
     def set_playing(self, is_playing: bool) -> None:
         self._btn_play.setText("⏸" if is_playing else "▶")
