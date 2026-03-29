@@ -264,6 +264,12 @@ class TimelineWidget(QWidget):
             ratio = event.position().x() / max(self.width(), 1)
             self._view_start_ms = int(cursor_ms - ratio * new_vd)
             self._clamp_view()
+        elif mods & Qt.KeyboardModifier.ShiftModifier:
+            # Seek cursor position
+            step_ms = max(1, int(abs(delta) / 120 * 100))
+            direction = 1 if delta < 0 else -1
+            new_pos = max(0, min(self._position_ms + direction * step_ms, self._duration_ms))
+            self.seekRequested.emit(new_pos)
         else:
             # Horizontal scroll
             vd = self._view_duration_ms()

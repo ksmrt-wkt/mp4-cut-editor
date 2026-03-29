@@ -146,6 +146,9 @@ class MainWindow(QMainWindow):
         self._timeline.segmentAddRequested.connect(self._add_segment)
         self._timeline.segmentRemoveRequested.connect(self._remove_segment)
 
+        # Player wheel seek
+        self._player.seekDelta.connect(self._adjust_cursor)
+
         # Transport controls → main
         self._transport.playPauseClicked.connect(self._player.toggle_play)
         self._transport.setInClicked.connect(self._set_in_at_current)
