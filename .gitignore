@@ -30,3 +30,6 @@ desktop.ini
 tmp/
 temp/
 mp4cut_*/
+
+# Claude Code
+.claude/
