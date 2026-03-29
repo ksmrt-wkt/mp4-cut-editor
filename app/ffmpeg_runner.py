@@ -256,6 +256,7 @@ def export_split(
     output_dir: str,
     base_name: str,
     progress_cb: Optional[Callable[[float, str], None]] = None,
+    start_number: int = 1,
 ) -> list[str]:
     """
     各セグメントを個別ファイルにエクスポートする。
@@ -269,7 +270,7 @@ def export_split(
         for i, seg in enumerate(segments):
             if progress_cb:
                 progress_cb(i / total, f"セグメント {i+1}/{total} を処理中...")
-            out_path = os.path.join(output_dir, f"{base_name}_{i+1:03d}.mp4")
+            out_path = os.path.join(output_dir, f"{base_name}_{start_number + i:03d}.mp4")
             tmp_out = _smart_export_segment(
                 ffmpeg, ffprobe, source_path,
                 seg.start_ms, seg.end_ms,

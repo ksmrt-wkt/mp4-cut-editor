@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QSplitter, QFileDialog, QMessageBox, QProgressDialog,
     QStatusBar, QLabel, QApplication,
+    QDialog, QDialogButtonBox, QFormLayout, QSpinBox, QLineEdit, QPushButton,
 )
 
 from .video_player import VideoPlayer
@@ -17,12 +18,65 @@ from .utils import Segment, VideoInfo, format_display_time
 from . import ffmpeg_runner
 
 
+class SplitExportDialog(QDialog):
+    def __init__(self, default_dir: str = "", parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("分割エクスポート設定")
+        self.setMinimumWidth(420)
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        # Output folder
+        folder_row = QHBoxLayout()
+        self._folder_edit = QLineEdit(default_dir)
+        self._folder_edit.setPlaceholderText("出力フォルダを選択...")
+        browse_btn = QPushButton("参照...")
+        browse_btn.setFixedWidth(64)
+        browse_btn.clicked.connect(self._browse)
+        folder_row.addWidget(self._folder_edit)
+        folder_row.addWidget(browse_btn)
+        form.addRow("出力フォルダ:", folder_row)
+
+        # Start number
+        self._spin = QSpinBox()
+        self._spin.setRange(0, 9999)
+        self._spin.setValue(1)
+        form.addRow("連番の先頭番号:", self._spin)
+
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _browse(self):
+        d = QFileDialog.getExistingDirectory(self, "出力フォルダを選択", self._folder_edit.text())
+        if d:
+            self._folder_edit.setText(d)
+
+    def _on_accept(self):
+        if not self._folder_edit.text().strip():
+            QMessageBox.warning(self, "入力エラー", "出力フォルダを指定してください。")
+            return
+        self.accept()
+
+    def output_dir(self) -> str:
+        return self._folder_edit.text().strip()
+
+    def start_number(self) -> int:
+        return self._spin.value()
+
+
 class ExportWorker(QObject):
     progress = pyqtSignal(float, str)
     finished = pyqtSignal(list)  # list of output paths
     error = pyqtSignal(str)
 
-    def __init__(self, source, segments, output, split: bool = False, output_dir: str = "", base_name: str = ""):
+    def __init__(self, source, segments, output, split: bool = False, output_dir: str = "", base_name: str = "", start_number: int = 1):
         super().__init__()
         self.source = source
         self.segments = segments
@@ -30,6 +84,7 @@ class ExportWorker(QObject):
         self.split = split
         self.output_dir = output_dir
         self.base_name = base_name
+        self.start_number = start_number
 
     def run(self):
         try:
@@ -40,6 +95,7 @@ class ExportWorker(QObject):
                     self.output_dir,
                     self.base_name,
                     lambda p, msg: self.progress.emit(p, msg),
+                    self.start_number,
                 )
                 self.finished.emit(paths)
             else:
@@ -222,14 +278,14 @@ class MainWindow(QMainWindow):
         base_name = os.path.basename(base)
 
         if split:
-            output_dir = QFileDialog.getExistingDirectory(
-                self, "出力フォルダを選択", os.path.dirname(self._source_path)
-            )
-            if not output_dir:
+            dlg = SplitExportDialog(os.path.dirname(self._source_path), self)
+            if dlg.exec() != QDialog.DialogCode.Accepted:
                 return
             worker = ExportWorker(
                 self._source_path, list(self._segments), "",
-                split=True, output_dir=output_dir, base_name=base_name + "_output",
+                split=True, output_dir=dlg.output_dir(),
+                base_name=base_name + "_output",
+                start_number=dlg.start_number(),
             )
         else:
             default_out = base + "_output.mp4"
