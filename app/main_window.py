@@ -1,3 +1,4 @@
+import json
 import os
 import threading
 
@@ -177,6 +178,10 @@ class MainWindow(QMainWindow):
         file_menu = menubar.addMenu("ファイル(&F)")
         file_menu.addAction("開く... (&O)\tCtrl+O", self._open_file)
         file_menu.addSeparator()
+        file_menu.addAction("プロジェクトを開く...\tCtrl+Shift+O", self._load_project)
+        self._save_project_action = file_menu.addAction("プロジェクトを保存...\tCtrl+S", self._save_project)
+        self._save_project_action.setEnabled(False)
+        file_menu.addSeparator()
         self._export_action = file_menu.addAction("エクスポート... (&E)\tCtrl+E", self._export)
         self._export_action.setEnabled(False)
         file_menu.addSeparator()
@@ -247,8 +252,86 @@ class MainWindow(QMainWindow):
         self._transport.update_out_time(-1)
         self._segment_list.update_segments([])
         self._export_action.setEnabled(True)
+        self._save_project_action.setEnabled(True)
 
         fname = os.path.basename(path)
+        self.setWindowTitle(f"MP4 カットエディタ — {fname}")
+        self._update_status()
+
+    def _save_project(self):
+        if not self._source_path:
+            return
+        base, _ = os.path.splitext(self._source_path)
+        default_path = base + ".mp4cut"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "プロジェクトを保存", default_path,
+            "MP4カットプロジェクト (*.mp4cut);;全ファイル (*)"
+        )
+        if not path:
+            return
+        data = {
+            "version": 1,
+            "source_path": self._source_path,
+            "in_point_ms": self._in_point_ms,
+            "out_point_ms": self._out_point_ms,
+            "segments": [{"start_ms": s.start_ms, "end_ms": s.end_ms} for s in self._segments],
+        }
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            QMessageBox.critical(self, "保存エラー", f"プロジェクトの保存に失敗しました:\n{e}")
+
+    def _load_project(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "プロジェクトを開く", "",
+            "MP4カットプロジェクト (*.mp4cut);;全ファイル (*)"
+        )
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            QMessageBox.critical(self, "読み込みエラー", f"プロジェクトファイルの読み込みに失敗しました:\n{e}")
+            return
+
+        source = data.get("source_path", "")
+        if not os.path.exists(source):
+            QMessageBox.warning(
+                self, "動画ファイルが見つかりません",
+                f"以下のファイルが見つかりません:\n{source}\n\n動画ファイルを手動で開き直してください。"
+            )
+            return
+
+        try:
+            info = ffmpeg_runner.probe(source)
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"ファイルの読み込みに失敗しました:\n{e}")
+            return
+
+        self._source_path = source
+        self._video_info = info
+        self._segments = [Segment(s["start_ms"], s["end_ms"]) for s in data.get("segments", [])]
+        self._in_point_ms = data.get("in_point_ms", -1)
+        self._out_point_ms = data.get("out_point_ms", -1)
+
+        self._player.load(source)
+        self._timeline.set_duration(info.duration_ms)
+        self._timeline.set_segments(self._segments)
+        if self._in_point_ms >= 0:
+            self._timeline.set_in_point(self._in_point_ms)
+        else:
+            self._timeline.clear_in_out()
+        if self._out_point_ms >= 0:
+            self._timeline.set_out_point(self._out_point_ms)
+        self._transport.update_in_time(self._in_point_ms)
+        self._transport.update_out_time(self._out_point_ms)
+        self._segment_list.update_segments(self._segments)
+        self._export_action.setEnabled(True)
+        self._save_project_action.setEnabled(True)
+
+        fname = os.path.basename(source)
         self.setWindowTitle(f"MP4 カットエディタ — {fname}")
         self._update_status()
 
@@ -489,8 +572,12 @@ class MainWindow(QMainWindow):
                 self._player.seek(min(dur, self._player.position() + 5000))
             else:
                 self._step_forward()
+        elif key == Qt.Key.Key_O and mod & Qt.KeyboardModifier.ControlModifier and mod & Qt.KeyboardModifier.ShiftModifier:
+            self._load_project()
         elif key == Qt.Key.Key_O and mod & Qt.KeyboardModifier.ControlModifier:
             self._open_file()
+        elif key == Qt.Key.Key_S and mod & Qt.KeyboardModifier.ControlModifier:
+            self._save_project()
         elif key == Qt.Key.Key_E and mod & Qt.KeyboardModifier.ControlModifier:
             self._export()
         else:
