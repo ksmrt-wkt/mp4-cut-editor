@@ -19,24 +19,37 @@ from . import ffmpeg_runner
 
 class ExportWorker(QObject):
     progress = pyqtSignal(float, str)
-    finished = pyqtSignal()
+    finished = pyqtSignal(list)  # list of output paths
     error = pyqtSignal(str)
 
-    def __init__(self, source, segments, output):
+    def __init__(self, source, segments, output, split: bool = False, output_dir: str = "", base_name: str = ""):
         super().__init__()
         self.source = source
         self.segments = segments
         self.output = output
+        self.split = split
+        self.output_dir = output_dir
+        self.base_name = base_name
 
     def run(self):
         try:
-            ffmpeg_runner.export(
-                self.source,
-                self.segments,
-                self.output,
-                lambda p, msg: self.progress.emit(p, msg),
-            )
-            self.finished.emit()
+            if self.split:
+                paths = ffmpeg_runner.export_split(
+                    self.source,
+                    self.segments,
+                    self.output_dir,
+                    self.base_name,
+                    lambda p, msg: self.progress.emit(p, msg),
+                )
+                self.finished.emit(paths)
+            else:
+                ffmpeg_runner.export(
+                    self.source,
+                    self.segments,
+                    self.output,
+                    lambda p, msg: self.progress.emit(p, msg),
+                )
+                self.finished.emit([self.output])
         except Exception as e:
             self.error.emit(str(e))
 
@@ -141,6 +154,7 @@ class MainWindow(QMainWindow):
         self._transport.stepBackClicked.connect(self._step_back)
         self._transport.stepForwardClicked.connect(self._step_forward)
         self._transport.cursorAdjustRequested.connect(self._adjust_cursor)
+        self._transport.volumeChanged.connect(self._player.set_volume)
 
         # Segment list → main
         self._segment_list.segmentRemoveRequested.connect(self._remove_segment)
@@ -188,14 +202,41 @@ class MainWindow(QMainWindow):
                                 "イン点とアウト点を設定してセグメントを追加してください。")
             return
 
-        base, ext = os.path.splitext(self._source_path)
-        default_out = base + "_output.mp4"
-        out_path, _ = QFileDialog.getSaveFileName(
-            self, "保存先を選択", default_out,
-            "MP4ファイル (*.mp4);;全ファイル (*)"
-        )
-        if not out_path:
+        # 連結 / 分割 の選択
+        msg = QMessageBox(self)
+        msg.setWindowTitle("エクスポート方法")
+        msg.setText(f"エクスポート方法を選択してください\n({len(self._segments)} セグメント)")
+        btn_concat = msg.addButton("連結して1ファイル", QMessageBox.ButtonRole.AcceptRole)
+        btn_split  = msg.addButton("セグメントごとに分割", QMessageBox.ButtonRole.AcceptRole)
+        msg.addButton("キャンセル", QMessageBox.ButtonRole.RejectRole)
+        msg.exec()
+        clicked = msg.clickedButton()
+        if clicked not in (btn_concat, btn_split):
             return
+        split = (clicked == btn_split)
+
+        base, _ = os.path.splitext(self._source_path)
+        base_name = os.path.basename(base)
+
+        if split:
+            output_dir = QFileDialog.getExistingDirectory(
+                self, "出力フォルダを選択", os.path.dirname(self._source_path)
+            )
+            if not output_dir:
+                return
+            worker = ExportWorker(
+                self._source_path, list(self._segments), "",
+                split=True, output_dir=output_dir, base_name=base_name + "_output",
+            )
+        else:
+            default_out = base + "_output.mp4"
+            out_path, _ = QFileDialog.getSaveFileName(
+                self, "保存先を選択", default_out,
+                "MP4ファイル (*.mp4);;全ファイル (*)"
+            )
+            if not out_path:
+                return
+            worker = ExportWorker(self._source_path, list(self._segments), out_path)
 
         # Progress dialog
         dlg = QProgressDialog("エクスポート中...", "キャンセル", 0, 100, self)
@@ -204,7 +245,6 @@ class MainWindow(QMainWindow):
         dlg.setMinimumDuration(0)
         dlg.setValue(0)
 
-        worker = ExportWorker(self._source_path, list(self._segments), out_path)
         thread = QThread(self)
         worker.moveToThread(thread)
 
@@ -212,20 +252,27 @@ class MainWindow(QMainWindow):
             dlg.setValue(int(p * 100)),
             dlg.setLabelText(msg),
         ))
-        worker.finished.connect(lambda: self._on_export_finished(dlg, thread, out_path))
+        worker.finished.connect(lambda paths: self._on_export_finished(dlg, thread, paths))
         worker.error.connect(lambda e: self._on_export_error(dlg, thread, e))
         thread.started.connect(worker.run)
         thread.start()
 
-        result = dlg.exec()
+        dlg.exec()
         if dlg.wasCanceled():
             thread.quit()
 
-    def _on_export_finished(self, dlg, thread, out_path):
+    def _on_export_finished(self, dlg, thread, paths: list):
         dlg.setValue(100)
         thread.quit()
         thread.wait()
-        QMessageBox.information(self, "完了", f"エクスポートが完了しました:\n{out_path}")
+        if len(paths) == 1:
+            QMessageBox.information(self, "完了", f"エクスポートが完了しました:\n{paths[0]}")
+        else:
+            files = "\n".join(os.path.basename(p) for p in paths)
+            QMessageBox.information(self, "完了",
+                f"{len(paths)} ファイルをエクスポートしました:\n"
+                f"{os.path.dirname(paths[0])}\n\n{files}"
+            )
 
     def _on_export_error(self, dlg, thread, error_msg):
         dlg.cancel()

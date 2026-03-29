@@ -1,6 +1,6 @@
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QFrame
+    QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QFrame, QSlider
 )
 
 from .utils import format_display_time
@@ -15,6 +15,7 @@ class TransportControls(QWidget):
     stepForwardClicked = pyqtSignal()
     # カーソル位置を delta_ms だけ移動する
     cursorAdjustRequested = pyqtSignal(int)
+    volumeChanged = pyqtSignal(float)  # 0.0 - 1.0
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -41,12 +42,25 @@ class TransportControls(QWidget):
         self._btn_step_fwd.setFixedWidth(36)
         self._btn_step_fwd.clicked.connect(self.stepForwardClicked)
 
-        self._time_label = QLabel("--:--.- / --:--.-")
+        self._time_label = QLabel("--:--.-- / --:--.--")
         self._time_label.setStyleSheet("font-family: monospace; font-size: 12px;")
         self._time_label.setMinimumWidth(160)
 
         zoom_hint = QLabel("ズーム: Ctrl+ホイール  /  スクロール: ホイール  /  リセット: ダブルクリック")
         zoom_hint.setStyleSheet("font-size: 9px; color: #666;")
+
+        vol_label = QLabel("🔊")
+        vol_label.setStyleSheet("font-size: 12px;")
+
+        self._vol_slider = QSlider(Qt.Orientation.Horizontal)
+        self._vol_slider.setRange(0, 100)
+        self._vol_slider.setValue(100)
+        self._vol_slider.setFixedWidth(80)
+        self._vol_slider.setToolTip("音量 (再生のみ。変換には影響しません)")
+        self._vol_slider.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._vol_slider.valueChanged.connect(
+            lambda v: self.volumeChanged.emit(v / 100.0)
+        )
 
         for btn in [self._btn_step_back, self._btn_play, self._btn_step_fwd]:
             btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -56,6 +70,8 @@ class TransportControls(QWidget):
         row1.addWidget(self._btn_step_fwd)
         row1.addWidget(self._time_label)
         row1.addStretch()
+        row1.addWidget(vol_label)
+        row1.addWidget(self._vol_slider)
         row1.addWidget(zoom_hint)
 
         # --- Row 2: カーソル微調整 + イン/アウト点設定 ---

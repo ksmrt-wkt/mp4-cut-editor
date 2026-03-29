@@ -31,13 +31,13 @@ def ms_to_timestamp(ms: int) -> str:
 
 
 def format_display_time(ms: int) -> str:
-    """Convert milliseconds to human-friendly HH:MM:SS.s display."""
+    """Convert milliseconds to human-friendly HH:MM:SS.ss display (10ms precision)."""
     total_seconds = ms // 1000
     millis = ms % 1000
     hours = total_seconds // 3600
     minutes = (total_seconds % 3600) // 60
     seconds = total_seconds % 60
     if hours > 0:
-        return f"{hours:d}:{minutes:02d}:{seconds:02d}.{millis // 100:01d}"
+        return f"{hours:d}:{minutes:02d}:{seconds:02d}.{millis // 10:02d}"
     else:
-        return f"{minutes:02d}:{seconds:02d}.{millis // 100:01d}"
+        return f"{minutes:02d}:{seconds:02d}.{millis // 10:02d}"

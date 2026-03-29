@@ -250,6 +250,41 @@ def _smart_export_segment(
 # Public export
 # ---------------------------------------------------------------------------
 
+def export_split(
+    source_path: str,
+    segments: list[Segment],
+    output_dir: str,
+    base_name: str,
+    progress_cb: Optional[Callable[[float, str], None]] = None,
+) -> list[str]:
+    """
+    各セグメントを個別ファイルにエクスポートする。
+    出力パスのリストを返す。
+    """
+    ffmpeg, ffprobe = find_ffmpeg()
+    tmpdir = tempfile.mkdtemp(prefix="mp4cut_")
+    output_paths: list[str] = []
+    try:
+        total = len(segments)
+        for i, seg in enumerate(segments):
+            if progress_cb:
+                progress_cb(i / total, f"セグメント {i+1}/{total} を処理中...")
+            out_path = os.path.join(output_dir, f"{base_name}_{i+1:03d}.mp4")
+            tmp_out = _smart_export_segment(
+                ffmpeg, ffprobe, source_path,
+                seg.start_ms, seg.end_ms,
+                tmpdir, i,
+            )
+            shutil.copy2(tmp_out, out_path)
+            output_paths.append(out_path)
+
+        if progress_cb:
+            progress_cb(1.0, "完了")
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+    return output_paths
+
+
 def export(
     source_path: str,
     segments: list[Segment],
