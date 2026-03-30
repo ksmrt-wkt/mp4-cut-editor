@@ -111,6 +111,21 @@ class ExportWorker(QObject):
             self.error.emit(str(e))
 
 
+class WaveformWorker(QObject):
+    finished = pyqtSignal(list)
+
+    def __init__(self, source_path: str):
+        super().__init__()
+        self.source_path = source_path
+
+    def run(self):
+        try:
+            data = ffmpeg_runner.extract_waveform(self.source_path)
+        except Exception:
+            data = []
+        self.finished.emit(data)
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -148,7 +163,7 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self._player)
 
         self._timeline = TimelineWidget()
-        self._timeline.setFixedHeight(80)
+        self._timeline.setFixedHeight(110)
         splitter.addWidget(self._timeline)
 
         bottom = QWidget()
@@ -254,6 +269,24 @@ class MainWindow(QMainWindow):
 
     # ----- File operations -----
 
+    def _start_waveform_load(self, source_path: str) -> None:
+        self._timeline.set_waveform([])
+        # Keep strong references to prevent garbage collection
+        self._waveform_worker = WaveformWorker(source_path)
+        self._waveform_thread = QThread(self)
+        self._waveform_worker.moveToThread(self._waveform_thread)
+        self._waveform_worker.finished.connect(
+            lambda data, p=source_path: self._on_waveform_loaded(data, p)
+        )
+        self._waveform_thread.started.connect(self._waveform_worker.run)
+        self._waveform_thread.start()
+
+    def _on_waveform_loaded(self, data: list, source_path: str) -> None:
+        self._waveform_thread.quit()
+        self._waveform_thread.wait()
+        if source_path == self._source_path:
+            self._timeline.set_waveform(data)
+
     def _open_file(self):
         path, _ = QFileDialog.getOpenFileName(
             self, tr("dlg_open_title"), "", tr("dlg_open_filter")
@@ -284,6 +317,7 @@ class MainWindow(QMainWindow):
 
         self._update_title()
         self._update_status()
+        self._start_waveform_load(path)
 
     def _save_project(self):
         if not self._source_path:
@@ -356,6 +390,7 @@ class MainWindow(QMainWindow):
 
         self._update_title()
         self._update_status()
+        self._start_waveform_load(source)
 
     def _export(self):
         if not self._source_path:

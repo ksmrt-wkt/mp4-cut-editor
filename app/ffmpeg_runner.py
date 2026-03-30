@@ -244,6 +244,53 @@ def _smart_export_segment(
 
 
 # ---------------------------------------------------------------------------
+# Waveform extraction
+# ---------------------------------------------------------------------------
+
+def extract_waveform(source_path: str, num_samples: int = 2000) -> list[float]:
+    """Extract audio amplitude as normalized RMS values for waveform display.
+
+    Returns a list of ``num_samples`` floats in [0.0, 1.0].
+    Returns all-zeros if the file has no audio stream.
+    """
+    import struct
+    ffmpeg, _ = find_ffmpeg()
+    cmd = [
+        ffmpeg, "-i", source_path,
+        "-vn", "-ac", "1", "-ar", "8000",
+        "-f", "f32le", "pipe:1",
+    ]
+    result = subprocess.run(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        timeout=300, creationflags=_NO_WINDOW,
+    )
+    data = result.stdout
+    if not data or len(data) < 4:
+        return [0.0] * num_samples
+
+    n_floats = len(data) // 4
+    samples = struct.unpack(f"{n_floats}f", data[: n_floats * 4])
+    total = len(samples)
+    chunk_size = max(1, total // num_samples)
+
+    waveform: list[float] = []
+    for i in range(num_samples):
+        start = i * chunk_size
+        end = min(start + chunk_size, total)
+        if start >= total:
+            waveform.append(0.0)
+        else:
+            chunk = samples[start:end]
+            rms = (sum(s * s for s in chunk) / len(chunk)) ** 0.5
+            waveform.append(rms)
+
+    max_val = max(waveform) if waveform else 0.0
+    if max_val > 0:
+        waveform = [v / max_val for v in waveform]
+    return waveform
+
+
+# ---------------------------------------------------------------------------
 # Public export
 # ---------------------------------------------------------------------------
 

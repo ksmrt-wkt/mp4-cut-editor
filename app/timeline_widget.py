@@ -24,14 +24,16 @@ class TimelineWidget(QWidget):
     RANGE_COLOR = QColor(255, 220, 50, 60)
     ZOOM_BAR_COLOR = QColor(80, 80, 80)
     ZOOM_BAR_HANDLE = QColor(120, 120, 120)
+    WAVEFORM_COLOR = QColor(70, 180, 130, 200)
 
+    WAVEFORM_HEIGHT = 28
     RULER_HEIGHT = 20
     MIN_WIDTH = 1
     MAX_ZOOM = 200.0
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumHeight(70)
+        self.setMinimumHeight(self.WAVEFORM_HEIGHT + self.RULER_HEIGHT + 40)
         self.setMouseTracking(True)
         self.setCursor(Qt.CursorShape.CrossCursor)
 
@@ -41,6 +43,7 @@ class TimelineWidget(QWidget):
         self._out_point_ms: int = -1
         self._segments: list[Segment] = []
         self._dragging = False
+        self._waveform: list[float] = []
 
         # Zoom / scroll state
         self._zoom: float = 1.0          # 1.0 = full view
@@ -74,6 +77,10 @@ class TimelineWidget(QWidget):
     def clear_in_out(self) -> None:
         self._in_point_ms = -1
         self._out_point_ms = -1
+        self.update()
+
+    def set_waveform(self, data: list[float]) -> None:
+        self._waveform = data
         self.update()
 
     def zoom_level(self) -> float:
@@ -126,8 +133,9 @@ class TimelineWidget(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
         w = self.width()
         h = self.height()
-        track_top = self.RULER_HEIGHT
-        track_h = h - self.RULER_HEIGHT
+        ruler_top = self.WAVEFORM_HEIGHT
+        track_top = self.WAVEFORM_HEIGHT + self.RULER_HEIGHT
+        track_h = h - track_top
 
         # Background
         painter.fillRect(0, 0, w, h, self.BG_COLOR)
@@ -137,11 +145,14 @@ class TimelineWidget(QWidget):
             painter.drawText(0, 0, w, h, Qt.AlignmentFlag.AlignCenter, tr("tl_open_hint"))
             return
 
+        # Waveform area
+        self._draw_waveform(painter, w)
+
         # Ruler background
-        painter.fillRect(0, 0, w, self.RULER_HEIGHT, self.RULER_COLOR)
+        painter.fillRect(0, ruler_top, w, self.RULER_HEIGHT, self.RULER_COLOR)
 
         # Ruler ticks & labels
-        self._draw_ruler(painter, w)
+        self._draw_ruler(painter, w, ruler_top)
 
         # Segments (green bars)
         for seg in self._segments:
@@ -180,7 +191,7 @@ class TimelineWidget(QWidget):
         # Playhead
         px = self._ms_to_x(self._position_ms)
         painter.setPen(QPen(self.PLAYHEAD_COLOR, 2))
-        painter.drawLine(px, 0, px, h)
+        painter.drawLine(px, ruler_top, px, h)
 
         # Zoom indicator (mini scrollbar at bottom)
         if self._zoom > 1.0:
@@ -196,7 +207,26 @@ class TimelineWidget(QWidget):
             hw = max(4, int(vd / self._duration_ms * w))
             painter.fillRect(hx, bar_y, hw, bar_h, self.ZOOM_BAR_HANDLE)
 
-    def _draw_ruler(self, painter: QPainter, w: int) -> None:
+    def _draw_waveform(self, painter: QPainter, w: int) -> None:
+        wf_h = self.WAVEFORM_HEIGHT - 2
+        if not self._waveform:
+            # Show dim placeholder when no data yet
+            painter.fillRect(0, 0, w, self.WAVEFORM_HEIGHT, QColor(25, 25, 25))
+            return
+        painter.fillRect(0, 0, w, self.WAVEFORM_HEIGHT, QColor(20, 20, 20))
+        total = len(self._waveform)
+        vd = self._view_duration_ms()
+        painter.setPen(Qt.PenStyle.NoPen)
+        for x in range(w):
+            ms = self._view_start_ms + int(x / w * vd)
+            idx = int(ms / self._duration_ms * total)
+            idx = max(0, min(idx, total - 1))
+            amp = self._waveform[idx]
+            bar_h = max(1, int(amp * wf_h))
+            y = self.WAVEFORM_HEIGHT - 1 - bar_h
+            painter.fillRect(x, y, 1, bar_h, self.WAVEFORM_COLOR)
+
+    def _draw_ruler(self, painter: QPainter, w: int, ruler_top: int = 0) -> None:
         vd_s = self._view_duration_ms() / 1000
         view_start_s = self._view_start_ms / 1000
 
@@ -221,9 +251,9 @@ class TimelineWidget(QWidget):
             if t >= 0:
                 x = int((t - view_start_s) / vd_s * w) if vd_s > 0 else 0
                 if 0 <= x <= w:
-                    painter.drawLine(x, self.RULER_HEIGHT - 5, x, self.RULER_HEIGHT)
+                    painter.drawLine(x, ruler_top + self.RULER_HEIGHT - 5, x, ruler_top + self.RULER_HEIGHT)
                     label = format_display_time(int(t * 1000))
-                    painter.drawText(x + 2, 0, 100, self.RULER_HEIGHT, Qt.AlignmentFlag.AlignVCenter, label)
+                    painter.drawText(x + 2, ruler_top, 100, self.RULER_HEIGHT, Qt.AlignmentFlag.AlignVCenter, label)
             t += tick_interval_s
 
     # --- Mouse / wheel events ---
