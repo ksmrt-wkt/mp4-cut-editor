@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import Callable, Optional
 
+from .i18n import tr
 from .utils import Segment, VideoInfo, ms_to_timestamp
 
 _NO_WINDOW = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
@@ -27,11 +28,7 @@ def find_ffmpeg() -> tuple[str, str]:
                     if Path(ffprobe).exists():
                         return ffmpeg, ffprobe
 
-    raise RuntimeError(
-        "ffmpeg/ffprobe が見つかりません。\n"
-        "ffmpeg をインストールして PATH に追加してください。\n"
-        "https://ffmpeg.org/download.html"
-    )
+    raise RuntimeError(tr("ffmpeg_not_found"))
 
 
 def probe(path: str) -> VideoInfo:
@@ -49,14 +46,14 @@ def probe(path: str) -> VideoInfo:
     stdout = result.stdout.decode("utf-8", errors="replace") if result.stdout else ""
     stderr = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
     if result.returncode != 0 or not stdout.strip():
-        raise RuntimeError(f"ffprobe エラー:\n{stderr or '出力がありません'}")
+        raise RuntimeError(tr("ffprobe_error").format(stderr=stderr or tr("ffprobe_no_output")))
 
     data = json.loads(stdout)
     video_stream = next(
         (s for s in data.get("streams", []) if s.get("codec_type") == "video"), None
     )
     if not video_stream:
-        raise RuntimeError("動画ストリームが見つかりません。")
+        raise RuntimeError(tr("ffmpeg_no_video_stream"))
 
     duration_s = float(
         data.get("format", {}).get("duration") or video_stream.get("duration", 0)
@@ -122,7 +119,7 @@ def _run(cmd: list[str], label: str, timeout: int = 600) -> None:
     )
     if result.returncode != 0:
         stderr = result.stderr.decode("utf-8", errors="replace")
-        raise RuntimeError(f"{label} に失敗しました:\n{stderr[-2000:]}")
+        raise RuntimeError(tr("ffmpeg_run_failed").format(label=label, stderr=stderr[-2000:]))
 
 
 def _stream_copy(ffmpeg: str, source: str, start_ms: int, end_ms: int, out: str) -> None:
@@ -259,8 +256,8 @@ def export_split(
     start_number: int = 1,
 ) -> list[str]:
     """
-    各セグメントを個別ファイルにエクスポートする。
-    出力パスのリストを返す。
+    Export each segment to an individual file.
+    Returns a list of output paths.
     """
     ffmpeg, ffprobe = find_ffmpeg()
     tmpdir = tempfile.mkdtemp(prefix="mp4cut_")
@@ -269,7 +266,7 @@ def export_split(
         total = len(segments)
         for i, seg in enumerate(segments):
             if progress_cb:
-                progress_cb(i / total, f"セグメント {i+1}/{total} を処理中...")
+                progress_cb(i / total, tr("export_progress_segment").format(i=i + 1, total=total))
             out_path = os.path.join(output_dir, f"{base_name}_{start_number + i:03d}.mp4")
             tmp_out = _smart_export_segment(
                 ffmpeg, ffprobe, source_path,
@@ -280,7 +277,7 @@ def export_split(
             output_paths.append(out_path)
 
         if progress_cb:
-            progress_cb(1.0, "完了")
+            progress_cb(1.0, tr("export_progress_done"))
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
     return output_paths
@@ -305,7 +302,7 @@ def export(
 
         for i, seg in enumerate(segments):
             if progress_cb:
-                progress_cb(i / total, f"セグメント {i+1}/{total} を処理中...")
+                progress_cb(i / total, tr("export_progress_segment").format(i=i + 1, total=total))
 
             out = _smart_export_segment(
                 ffmpeg, ffprobe, source_path,
@@ -315,7 +312,7 @@ def export(
             segment_files.append(out)
 
         if progress_cb:
-            progress_cb(0.95, "セグメントを結合中...")
+            progress_cb(0.95, tr("export_progress_merging"))
 
         if len(segment_files) == 1:
             shutil.copy2(segment_files[0], output_path)
@@ -323,7 +320,7 @@ def export(
             _concat_files(ffmpeg, segment_files, output_path, tmpdir, "final")
 
         if progress_cb:
-            progress_cb(1.0, "完了")
+            progress_cb(1.0, tr("export_progress_done"))
 
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)

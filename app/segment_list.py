@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QHeaderView, QAbstractItemView
 )
 
+from .i18n import tr
 from .utils import Segment, format_display_time
 
 
@@ -16,12 +17,11 @@ class SegmentList(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(2)
 
-        header = QLabel("セグメント一覧")
-        header.setStyleSheet("font-weight: bold; font-size: 11px;")
-        layout.addWidget(header)
+        self._header = QLabel()
+        self._header.setStyleSheet("font-weight: bold; font-size: 11px;")
+        layout.addWidget(self._header)
 
         self._table = QTableWidget(0, 4)
-        self._table.setHorizontalHeaderLabels(["開始", "終了", "長さ", ""])
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self._table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
@@ -33,14 +33,24 @@ class SegmentList(QWidget):
         self._table.verticalHeader().setVisible(False)
         self._table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._table.setMinimumWidth(260)
-
         layout.addWidget(self._table)
 
-        self._total_label = QLabel("合計: 0 セグメント / 0:00.0")
+        self._total_label = QLabel()
         self._total_label.setStyleSheet("font-size: 10px; color: #aaa;")
         layout.addWidget(self._total_label)
 
+        self._segments: list[Segment] = []
+        self.retranslate_ui()
+
+    def retranslate_ui(self) -> None:
+        self._header.setText(tr("seg_list_header"))
+        self._table.setHorizontalHeaderLabels([
+            tr("seg_col_start"), tr("seg_col_end"), tr("seg_col_dur"), ""
+        ])
+        self.update_segments(self._segments)
+
     def update_segments(self, segments: list[Segment]) -> None:
+        self._segments = list(segments)
         self._table.setRowCount(0)
         total_ms = 0
         for i, seg in enumerate(segments):
@@ -51,7 +61,7 @@ class SegmentList(QWidget):
             self._table.setItem(row, 1, QTableWidgetItem(format_display_time(seg.end_ms)))
             self._table.setItem(row, 2, QTableWidgetItem(format_display_time(seg.duration_ms)))
 
-            btn = QPushButton("削除")
+            btn = QPushButton(tr("seg_btn_remove"))
             btn.setFixedHeight(22)
             btn.setStyleSheet("font-size: 10px; color: #e05050;")
             btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -62,5 +72,5 @@ class SegmentList(QWidget):
 
         n = len(segments)
         self._total_label.setText(
-            f"合計: {n} セグメント / {format_display_time(total_ms)}"
+            tr("seg_total").format(n=n, time=format_display_time(total_ms))
         )

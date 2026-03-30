@@ -10,7 +10,9 @@ from PyQt6.QtWidgets import (
     QStatusBar, QLabel, QApplication,
     QDialog, QDialogButtonBox, QFormLayout, QSpinBox, QLineEdit, QPushButton,
 )
+from PyQt6.QtCore import QSettings
 
+from .i18n import tr, set_language, get_language
 from .video_player import VideoPlayer
 from .timeline_widget import TimelineWidget
 from .transport_controls import TransportControls
@@ -22,28 +24,26 @@ from . import ffmpeg_runner
 class SplitExportDialog(QDialog):
     def __init__(self, default_dir: str = "", parent=None):
         super().__init__(parent)
-        self.setWindowTitle("分割エクスポート設定")
+        self.setWindowTitle(tr("dlg_split_title"))
         self.setMinimumWidth(420)
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
 
-        # Output folder
         folder_row = QHBoxLayout()
         self._folder_edit = QLineEdit(default_dir)
-        self._folder_edit.setPlaceholderText("出力フォルダを選択...")
-        browse_btn = QPushButton("参照...")
+        self._folder_edit.setPlaceholderText(tr("dlg_split_folder_placeholder"))
+        browse_btn = QPushButton(tr("dlg_split_browse"))
         browse_btn.setFixedWidth(64)
         browse_btn.clicked.connect(self._browse)
         folder_row.addWidget(self._folder_edit)
         folder_row.addWidget(browse_btn)
-        form.addRow("出力フォルダ:", folder_row)
+        form.addRow(tr("dlg_split_folder"), folder_row)
 
-        # Start number
         self._spin = QSpinBox()
         self._spin.setRange(0, 9999)
         self._spin.setValue(1)
-        form.addRow("連番の先頭番号:", self._spin)
+        form.addRow(tr("dlg_split_start_num"), self._spin)
 
         layout.addLayout(form)
 
@@ -55,13 +55,13 @@ class SplitExportDialog(QDialog):
         layout.addWidget(buttons)
 
     def _browse(self):
-        d = QFileDialog.getExistingDirectory(self, "出力フォルダを選択", self._folder_edit.text())
+        d = QFileDialog.getExistingDirectory(self, tr("dlg_split_folder_select"), self._folder_edit.text())
         if d:
             self._folder_edit.setText(d)
 
     def _on_accept(self):
         if not self._folder_edit.text().strip():
-            QMessageBox.warning(self, "入力エラー", "出力フォルダを指定してください。")
+            QMessageBox.warning(self, tr("dlg_input_error"), tr("dlg_split_folder_error"))
             return
         self.accept()
 
@@ -114,7 +114,6 @@ class ExportWorker(QObject):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("MP4 カットエディタ")
         self.resize(1100, 700)
 
         self._source_path: str = ""
@@ -123,9 +122,15 @@ class MainWindow(QMainWindow):
         self._out_point_ms: int = -1
         self._segments: list[Segment] = []
 
+        # Load saved language
+        settings = QSettings("mp4cut", "mp4cut")
+        saved_lang = settings.value("language", "ja")
+        set_language(saved_lang)
+
         self._build_ui()
         self._build_menu()
         self._connect_signals()
+        self.setWindowTitle(tr("app_title"))
 
     # ----- UI construction -----
 
@@ -138,17 +143,14 @@ class MainWindow(QMainWindow):
 
         splitter = QSplitter(Qt.Orientation.Vertical)
 
-        # Video player
         self._player = VideoPlayer()
         self._player.setMinimumHeight(200)
         splitter.addWidget(self._player)
 
-        # Timeline
         self._timeline = TimelineWidget()
         self._timeline.setFixedHeight(80)
         splitter.addWidget(self._timeline)
 
-        # Bottom: transport + segment list
         bottom = QWidget()
         bottom_layout = QHBoxLayout(bottom)
         bottom_layout.setContentsMargins(0, 0, 0, 0)
@@ -167,50 +169,56 @@ class MainWindow(QMainWindow):
 
         root.addWidget(splitter)
 
-        # Status bar
         self._status = QStatusBar()
         self.setStatusBar(self._status)
-        self._status_label = QLabel("ファイルを開いてください  (Ctrl+O)")
+        self._status_label = QLabel(tr("status_open_hint"))
         self._status.addWidget(self._status_label)
 
     def _build_menu(self):
         menubar = self.menuBar()
-        file_menu = menubar.addMenu("ファイル(&F)")
-        file_menu.addAction("開く... (&O)\tCtrl+O", self._open_file)
-        file_menu.addSeparator()
-        file_menu.addAction("プロジェクトを開く...\tCtrl+Shift+O", self._load_project)
-        self._save_project_action = file_menu.addAction("プロジェクトを保存...\tCtrl+S", self._save_project)
-        self._save_project_action.setEnabled(False)
-        file_menu.addSeparator()
-        self._export_action = file_menu.addAction("エクスポート... (&E)\tCtrl+E", self._export)
-        self._export_action.setEnabled(False)
-        file_menu.addSeparator()
-        file_menu.addAction("終了 (&Q)\tCtrl+Q", self.close)
+        menubar.clear()
 
-        edit_menu = menubar.addMenu("編集(&E)")
-        edit_menu.addAction("イン点を設定\tI", self._set_in_at_current)
-        edit_menu.addAction("アウト点を設定\tO", self._set_out_at_current)
-        edit_menu.addAction("セグメント追加\tEnter", self._add_segment)
+        file_menu = menubar.addMenu(tr("menu_file"))
+        file_menu.addAction(tr("menu_open"), self._open_file)
+        file_menu.addSeparator()
+        file_menu.addAction(tr("menu_project_open"), self._load_project)
+        self._save_project_action = file_menu.addAction(tr("menu_project_save"), self._save_project)
+        self._save_project_action.setEnabled(bool(self._source_path))
+        file_menu.addSeparator()
+        self._export_action = file_menu.addAction(tr("menu_export"), self._export)
+        self._export_action.setEnabled(bool(self._source_path))
+        file_menu.addSeparator()
+        file_menu.addAction(tr("menu_quit"), self.close)
+
+        edit_menu = menubar.addMenu(tr("menu_edit"))
+        edit_menu.addAction(tr("menu_set_in"), self._set_in_at_current)
+        edit_menu.addAction(tr("menu_set_out"), self._set_out_at_current)
+        edit_menu.addAction(tr("menu_add_segment"), self._add_segment)
         edit_menu.addSeparator()
-        edit_menu.addAction("全セグメントをクリア", self._clear_segments)
+        edit_menu.addAction(tr("menu_clear_segments"), self._clear_segments)
+
+        settings_menu = menubar.addMenu(tr("menu_settings"))
+        lang_menu = settings_menu.addMenu(tr("menu_language"))
+        act_ja = lang_menu.addAction(tr("menu_lang_ja"), lambda: self._set_language("ja"))
+        act_en = lang_menu.addAction(tr("menu_lang_en"), lambda: self._set_language("en"))
+        act_ja.setCheckable(True)
+        act_en.setCheckable(True)
+        act_ja.setChecked(get_language() == "ja")
+        act_en.setChecked(get_language() == "en")
 
     def _connect_signals(self):
-        # Player → timeline / transport
         self._player.positionChanged.connect(self._on_position_changed)
         self._player.durationChanged.connect(self._on_duration_changed)
         self._player.playbackStateChanged.connect(self._on_playback_state_changed)
 
-        # Timeline → main
         self._timeline.seekRequested.connect(self._player.seek)
         self._timeline.inPointChanged.connect(self._set_in_point)
         self._timeline.outPointChanged.connect(self._set_out_point)
         self._timeline.segmentAddRequested.connect(self._add_segment)
         self._timeline.segmentRemoveRequested.connect(self._remove_segment)
 
-        # Player wheel seek
         self._player.seekDelta.connect(self._adjust_cursor)
 
-        # Transport controls → main
         self._transport.playPauseClicked.connect(self._player.toggle_play)
         self._transport.setInClicked.connect(self._set_in_at_current)
         self._transport.setOutClicked.connect(self._set_out_at_current)
@@ -220,22 +228,42 @@ class MainWindow(QMainWindow):
         self._transport.cursorAdjustRequested.connect(self._adjust_cursor)
         self._transport.volumeChanged.connect(self._player.set_volume)
 
-        # Segment list → main
         self._segment_list.segmentRemoveRequested.connect(self._remove_segment)
+
+    # ----- Language -----
+
+    def _set_language(self, lang: str) -> None:
+        set_language(lang)
+        QSettings("mp4cut", "mp4cut").setValue("language", lang)
+        self.retranslate_ui()
+
+    def retranslate_ui(self) -> None:
+        self._build_menu()
+        self._transport.retranslate_ui()
+        self._segment_list.retranslate_ui()
+        self._timeline.update()  # redraws placeholder text
+        self._update_title()
+        self._update_status()
+
+    def _update_title(self) -> None:
+        if self._source_path:
+            fname = os.path.basename(self._source_path)
+            self.setWindowTitle(f"{tr('app_title')} — {fname}")
+        else:
+            self.setWindowTitle(tr("app_title"))
 
     # ----- File operations -----
 
     def _open_file(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "MP4ファイルを開く", "",
-            "動画ファイル (*.mp4 *.MP4 *.m4v *.mov *.mkv *.avi);;全ファイル (*)"
+            self, tr("dlg_open_title"), "", tr("dlg_open_filter")
         )
         if not path:
             return
         try:
             info = ffmpeg_runner.probe(path)
         except Exception as e:
-            QMessageBox.critical(self, "エラー", f"ファイルの読み込みに失敗しました:\n{e}")
+            QMessageBox.critical(self, tr("err_load_title"), tr("err_load_msg").format(e=e))
             return
 
         self._source_path = path
@@ -254,8 +282,7 @@ class MainWindow(QMainWindow):
         self._export_action.setEnabled(True)
         self._save_project_action.setEnabled(True)
 
-        fname = os.path.basename(path)
-        self.setWindowTitle(f"MP4 カットエディタ — {fname}")
+        self._update_title()
         self._update_status()
 
     def _save_project(self):
@@ -264,8 +291,7 @@ class MainWindow(QMainWindow):
         base, _ = os.path.splitext(self._source_path)
         default_path = base + ".mp4cut"
         path, _ = QFileDialog.getSaveFileName(
-            self, "プロジェクトを保存", default_path,
-            "MP4カットプロジェクト (*.mp4cut);;全ファイル (*)"
+            self, tr("dlg_save_project_title"), default_path, tr("dlg_save_project_filter")
         )
         if not path:
             return
@@ -280,12 +306,11 @@ class MainWindow(QMainWindow):
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            QMessageBox.critical(self, "保存エラー", f"プロジェクトの保存に失敗しました:\n{e}")
+            QMessageBox.critical(self, tr("err_save_project_title"), tr("err_save_project_msg").format(e=e))
 
     def _load_project(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "プロジェクトを開く", "",
-            "MP4カットプロジェクト (*.mp4cut);;全ファイル (*)"
+            self, tr("dlg_load_project_title"), "", tr("dlg_load_project_filter")
         )
         if not path:
             return
@@ -293,21 +318,19 @@ class MainWindow(QMainWindow):
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except Exception as e:
-            QMessageBox.critical(self, "読み込みエラー", f"プロジェクトファイルの読み込みに失敗しました:\n{e}")
+            QMessageBox.critical(self, tr("err_load_project_title"), tr("err_load_project_msg").format(e=e))
             return
 
         source = data.get("source_path", "")
         if not os.path.exists(source):
-            QMessageBox.warning(
-                self, "動画ファイルが見つかりません",
-                f"以下のファイルが見つかりません:\n{source}\n\n動画ファイルを手動で開き直してください。"
-            )
+            QMessageBox.warning(self, tr("warn_source_missing_title"),
+                                tr("warn_source_missing").format(path=source))
             return
 
         try:
             info = ffmpeg_runner.probe(source)
         except Exception as e:
-            QMessageBox.critical(self, "エラー", f"ファイルの読み込みに失敗しました:\n{e}")
+            QMessageBox.critical(self, tr("err_load_title"), tr("err_load_msg").format(e=e))
             return
 
         self._source_path = source
@@ -331,26 +354,22 @@ class MainWindow(QMainWindow):
         self._export_action.setEnabled(True)
         self._save_project_action.setEnabled(True)
 
-        fname = os.path.basename(source)
-        self.setWindowTitle(f"MP4 カットエディタ — {fname}")
+        self._update_title()
         self._update_status()
 
     def _export(self):
         if not self._source_path:
             return
         if not self._segments:
-            QMessageBox.warning(self, "セグメントなし",
-                                "エクスポートするセグメントがありません。\n"
-                                "イン点とアウト点を設定してセグメントを追加してください。")
+            QMessageBox.warning(self, tr("warn_no_segments_title"), tr("warn_no_segments"))
             return
 
-        # 連結 / 分割 の選択
         msg = QMessageBox(self)
-        msg.setWindowTitle("エクスポート方法")
-        msg.setText(f"エクスポート方法を選択してください\n({len(self._segments)} セグメント)")
-        btn_concat = msg.addButton("連結して1ファイル", QMessageBox.ButtonRole.AcceptRole)
-        btn_split  = msg.addButton("セグメントごとに分割", QMessageBox.ButtonRole.AcceptRole)
-        msg.addButton("キャンセル", QMessageBox.ButtonRole.RejectRole)
+        msg.setWindowTitle(tr("dlg_export_method_title"))
+        msg.setText(tr("dlg_export_method_text").format(n=len(self._segments)))
+        btn_concat = msg.addButton(tr("dlg_export_concat"), QMessageBox.ButtonRole.AcceptRole)
+        btn_split  = msg.addButton(tr("dlg_export_split"),  QMessageBox.ButtonRole.AcceptRole)
+        msg.addButton(tr("dlg_cancel"), QMessageBox.ButtonRole.RejectRole)
         msg.exec()
         clicked = msg.clickedButton()
         if clicked not in (btn_concat, btn_split):
@@ -373,34 +392,32 @@ class MainWindow(QMainWindow):
         else:
             default_out = base + "_output.mp4"
             out_path, _ = QFileDialog.getSaveFileName(
-                self, "保存先を選択", default_out,
-                "MP4ファイル (*.mp4);;全ファイル (*)"
+                self, tr("dlg_export_save_title"), default_out, tr("dlg_export_filter")
             )
             if not out_path:
                 return
             worker = ExportWorker(self._source_path, list(self._segments), out_path)
 
-        # Progress dialog
-        dlg = QProgressDialog("エクスポート中...", "キャンセル", 0, 100, self)
-        dlg.setWindowTitle("エクスポート")
-        dlg.setWindowModality(Qt.WindowModality.WindowModal)
-        dlg.setMinimumDuration(0)
-        dlg.setValue(0)
+        progress_dlg = QProgressDialog(tr("dlg_exporting"), tr("dlg_cancel"), 0, 100, self)
+        progress_dlg.setWindowTitle(tr("dlg_export_title"))
+        progress_dlg.setWindowModality(Qt.WindowModality.WindowModal)
+        progress_dlg.setMinimumDuration(0)
+        progress_dlg.setValue(0)
 
         thread = QThread(self)
         worker.moveToThread(thread)
 
-        worker.progress.connect(lambda p, msg: (
-            dlg.setValue(int(p * 100)),
-            dlg.setLabelText(msg),
+        worker.progress.connect(lambda p, m: (
+            progress_dlg.setValue(int(p * 100)),
+            progress_dlg.setLabelText(m),
         ))
-        worker.finished.connect(lambda paths: self._on_export_finished(dlg, thread, paths))
-        worker.error.connect(lambda e: self._on_export_error(dlg, thread, e))
+        worker.finished.connect(lambda paths: self._on_export_finished(progress_dlg, thread, paths))
+        worker.error.connect(lambda e: self._on_export_error(progress_dlg, thread, e))
         thread.started.connect(worker.run)
         thread.start()
 
-        dlg.exec()
-        if dlg.wasCanceled():
+        progress_dlg.exec()
+        if progress_dlg.wasCanceled():
             thread.quit()
 
     def _on_export_finished(self, dlg, thread, paths: list):
@@ -408,19 +425,19 @@ class MainWindow(QMainWindow):
         thread.quit()
         thread.wait()
         if len(paths) == 1:
-            QMessageBox.information(self, "完了", f"エクスポートが完了しました:\n{paths[0]}")
+            QMessageBox.information(self, tr("dlg_complete"),
+                                    tr("export_done_single").format(path=paths[0]))
         else:
             files = "\n".join(os.path.basename(p) for p in paths)
-            QMessageBox.information(self, "完了",
-                f"{len(paths)} ファイルをエクスポートしました:\n"
-                f"{os.path.dirname(paths[0])}\n\n{files}"
-            )
+            QMessageBox.information(self, tr("dlg_complete"),
+                                    tr("export_done_multi_header").format(
+                                        n=len(paths), dir=os.path.dirname(paths[0]), files=files))
 
     def _on_export_error(self, dlg, thread, error_msg):
         dlg.cancel()
         thread.quit()
         thread.wait()
-        QMessageBox.critical(self, "エクスポートエラー", error_msg)
+        QMessageBox.critical(self, tr("err_export_title"), error_msg)
 
     # ----- In/Out points -----
 
@@ -451,21 +468,17 @@ class MainWindow(QMainWindow):
 
     def _add_segment(self):
         if self._in_point_ms < 0 or self._out_point_ms < 0:
-            QMessageBox.warning(self, "イン/アウト点未設定",
-                                "イン点とアウト点を設定してからセグメントを追加してください。")
+            QMessageBox.warning(self, tr("warn_no_inout_title"), tr("warn_no_inout"))
             return
         if self._out_point_ms <= self._in_point_ms:
-            QMessageBox.warning(self, "範囲エラー",
-                                "アウト点はイン点より後に設定してください。")
+            QMessageBox.warning(self, tr("warn_range_error_title"), tr("warn_range_error"))
             return
 
         new_seg = Segment(self._in_point_ms, self._out_point_ms)
 
-        # Check overlap
         for seg in self._segments:
             if not (new_seg.end_ms <= seg.start_ms or new_seg.start_ms >= seg.end_ms):
-                QMessageBox.warning(self, "重複エラー",
-                                    "既存のセグメントと重複しています。")
+                QMessageBox.warning(self, tr("warn_overlap_title"), tr("warn_overlap"))
                 return
 
         self._segments.append(new_seg)
@@ -490,7 +503,7 @@ class MainWindow(QMainWindow):
     def _clear_segments(self):
         if not self._segments:
             return
-        reply = QMessageBox.question(self, "確認", "全セグメントを削除しますか？",
+        reply = QMessageBox.question(self, tr("warn_clear_title"), tr("warn_clear_msg"),
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             self._segments.clear()
@@ -512,7 +525,7 @@ class MainWindow(QMainWindow):
     def _frame_ms(self) -> int:
         if self._video_info and self._video_info.fps > 0:
             return int(1000 / self._video_info.fps)
-        return 33  # ~30fps fallback
+        return 33
 
     # ----- Signal handlers -----
 
@@ -534,17 +547,17 @@ class MainWindow(QMainWindow):
 
     def _update_status(self):
         if not self._source_path:
-            self._status_label.setText("ファイルを開いてください  (Ctrl+O)")
+            self._status_label.setText(tr("status_open_hint"))
             return
 
         fname = os.path.basename(self._source_path)
         n = len(self._segments)
         total_ms = sum(s.duration_ms for s in self._segments)
-        in_str = format_display_time(self._in_point_ms) if self._in_point_ms >= 0 else "未設定"
-        out_str = format_display_time(self._out_point_ms) if self._out_point_ms >= 0 else "未設定"
+        in_str = format_display_time(self._in_point_ms) if self._in_point_ms >= 0 else tr("status_in_unset")
+        out_str = format_display_time(self._out_point_ms) if self._out_point_ms >= 0 else tr("status_out_unset")
         self._status_label.setText(
-            f"{fname}  |  セグメント: {n}個 / {format_display_time(total_ms)}  "
-            f"|  イン: {in_str}  アウト: {out_str}"
+            f"{fname}  |  {n} / {format_display_time(total_ms)}  "
+            f"|  In: {in_str}  Out: {out_str}"
         )
 
     # ----- Keyboard shortcuts -----

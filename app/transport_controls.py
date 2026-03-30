@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QFrame, QSlider
 )
 
+from .i18n import tr
 from .utils import format_display_time
 
 
@@ -13,7 +14,6 @@ class TransportControls(QWidget):
     addSegmentClicked = pyqtSignal()
     stepBackClicked = pyqtSignal()
     stepForwardClicked = pyqtSignal()
-    # カーソル位置を delta_ms だけ移動する
     cursorAdjustRequested = pyqtSignal(int)
     volumeChanged = pyqtSignal(float)  # 0.0 - 1.0
 
@@ -23,22 +23,19 @@ class TransportControls(QWidget):
         root.setContentsMargins(4, 4, 4, 4)
         root.setSpacing(2)
 
-        # --- Row 1: 再生コントロール ---
+        # --- Row 1 ---
         row1 = QHBoxLayout()
         row1.setSpacing(4)
 
         self._btn_step_back = QPushButton("◀◀")
-        self._btn_step_back.setToolTip("1フレーム戻る (←)")
         self._btn_step_back.setFixedWidth(36)
         self._btn_step_back.clicked.connect(self.stepBackClicked)
 
         self._btn_play = QPushButton("▶")
-        self._btn_play.setToolTip("再生/一時停止 (Space)")
         self._btn_play.setFixedWidth(40)
         self._btn_play.clicked.connect(self.playPauseClicked)
 
         self._btn_step_fwd = QPushButton("▶▶")
-        self._btn_step_fwd.setToolTip("1フレーム進む (→)")
         self._btn_step_fwd.setFixedWidth(36)
         self._btn_step_fwd.clicked.connect(self.stepForwardClicked)
 
@@ -46,8 +43,8 @@ class TransportControls(QWidget):
         self._time_label.setStyleSheet("font-family: monospace; font-size: 12px;")
         self._time_label.setMinimumWidth(160)
 
-        zoom_hint = QLabel("ズーム: Ctrl+ホイール  /  スクロール: ホイール  /  リセット: ダブルクリック")
-        zoom_hint.setStyleSheet("font-size: 9px; color: #666;")
+        self._zoom_hint = QLabel()
+        self._zoom_hint.setStyleSheet("font-size: 9px; color: #666;")
 
         vol_label = QLabel("🔊")
         vol_label.setStyleSheet("font-size: 12px;")
@@ -56,7 +53,6 @@ class TransportControls(QWidget):
         self._vol_slider.setRange(0, 100)
         self._vol_slider.setValue(100)
         self._vol_slider.setFixedWidth(80)
-        self._vol_slider.setToolTip("音量 (再生のみ。変換には影響しません)")
         self._vol_slider.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._vol_slider.valueChanged.connect(
             lambda v: self.volumeChanged.emit(v / 100.0)
@@ -72,22 +68,21 @@ class TransportControls(QWidget):
         row1.addStretch()
         row1.addWidget(vol_label)
         row1.addWidget(self._vol_slider)
-        row1.addWidget(zoom_hint)
+        row1.addWidget(self._zoom_hint)
 
-        # --- Row 2: カーソル微調整 + イン/アウト点設定 ---
+        # --- Row 2 ---
         row2 = QHBoxLayout()
         row2.setSpacing(4)
 
-        # カーソル微調整ボタン
-        cur_label = QLabel("カーソル微調整:")
-        cur_label.setStyleSheet("font-size: 11px;")
+        self._cur_label = QLabel()
+        self._cur_label.setStyleSheet("font-size: 11px;")
 
-        self._btn_m1s   = self._make_adj_btn("-1秒",   "カーソルを1秒戻す (Shift+←)")
-        self._btn_m100  = self._make_adj_btn("-100ms",  "カーソルを100ms戻す")
-        self._btn_m10   = self._make_adj_btn("-10ms",   "カーソルを10ms戻す")
-        self._btn_p10   = self._make_adj_btn("+10ms",   "カーソルを10ms進める")
-        self._btn_p100  = self._make_adj_btn("+100ms",  "カーソルを100ms進める")
-        self._btn_p1s   = self._make_adj_btn("+1秒",   "カーソルを1秒進める (Shift+→)")
+        self._btn_m1s  = self._make_adj_btn()
+        self._btn_m100 = self._make_adj_btn()
+        self._btn_m10  = self._make_adj_btn()
+        self._btn_p10  = self._make_adj_btn()
+        self._btn_p100 = self._make_adj_btn()
+        self._btn_p1s  = self._make_adj_btn()
 
         self._btn_m1s.clicked.connect(lambda: self.cursorAdjustRequested.emit(-1000))
         self._btn_m100.clicked.connect(lambda: self.cursorAdjustRequested.emit(-100))
@@ -98,42 +93,37 @@ class TransportControls(QWidget):
 
         sep1 = self._make_sep()
 
-        # イン/アウト点設定ボタン
-        self._btn_in = QPushButton("[ イン点設定  (I)")
-        self._btn_in.setToolTip("現在のカーソル位置をイン点に設定")
+        self._btn_in = QPushButton()
         self._btn_in.setStyleSheet("color: #FFDC32; font-size: 11px;")
         self._btn_in.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._btn_in.clicked.connect(self.setInClicked)
 
-        self._btn_out = QPushButton("アウト点設定 ]  (O)")
-        self._btn_out.setToolTip("現在のカーソル位置をアウト点に設定")
+        self._btn_out = QPushButton()
         self._btn_out.setStyleSheet("color: #FFDC32; font-size: 11px;")
         self._btn_out.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._btn_out.clicked.connect(self.setOutClicked)
 
-        self._btn_add = QPushButton("+ セグメント追加  (Enter)")
-        self._btn_add.setToolTip("イン〜アウト範囲をセグメントに追加")
+        self._btn_add = QPushButton()
         self._btn_add.setStyleSheet("color: #50A050; font-size: 11px;")
         self._btn_add.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._btn_add.clicked.connect(self.addSegmentClicked)
 
         sep2 = self._make_sep()
 
-        # イン/アウト点の現在値表示
-        in_lbl = QLabel("イン:")
-        in_lbl.setStyleSheet("color: #FFDC32; font-size: 11px;")
+        self._in_lbl = QLabel()
+        self._in_lbl.setStyleSheet("color: #FFDC32; font-size: 11px;")
         self._in_time_label = QLabel("--:--.---")
         self._in_time_label.setStyleSheet(
             "font-family: monospace; font-size: 11px; color: #FFDC32; min-width: 78px;"
         )
-        out_lbl = QLabel("アウト:")
-        out_lbl.setStyleSheet("color: #FFDC32; font-size: 11px;")
+        self._out_lbl = QLabel()
+        self._out_lbl.setStyleSheet("color: #FFDC32; font-size: 11px;")
         self._out_time_label = QLabel("--:--.---")
         self._out_time_label.setStyleSheet(
             "font-family: monospace; font-size: 11px; color: #FFDC32; min-width: 78px;"
         )
-        dur_lbl = QLabel("間隔:")
-        dur_lbl.setStyleSheet("color: #AADDAA; font-size: 11px;")
+        self._dur_lbl = QLabel()
+        self._dur_lbl.setStyleSheet("color: #AADDAA; font-size: 11px;")
         self._dur_label = QLabel("--:--.---")
         self._dur_label.setStyleSheet(
             "font-family: monospace; font-size: 11px; color: #AADDAA; min-width: 78px;"
@@ -142,7 +132,7 @@ class TransportControls(QWidget):
         self._in_ms:  int = -1
         self._out_ms: int = -1
 
-        row2.addWidget(cur_label)
+        row2.addWidget(self._cur_label)
         row2.addWidget(self._btn_m1s)
         row2.addWidget(self._btn_m100)
         row2.addWidget(self._btn_m10)
@@ -154,20 +144,52 @@ class TransportControls(QWidget):
         row2.addWidget(self._btn_out)
         row2.addWidget(self._btn_add)
         row2.addWidget(sep2)
-        row2.addWidget(in_lbl)
+        row2.addWidget(self._in_lbl)
         row2.addWidget(self._in_time_label)
-        row2.addWidget(out_lbl)
+        row2.addWidget(self._out_lbl)
         row2.addWidget(self._out_time_label)
-        row2.addWidget(dur_lbl)
+        row2.addWidget(self._dur_lbl)
         row2.addWidget(self._dur_label)
         row2.addStretch()
 
         root.addLayout(row1)
         root.addLayout(row2)
 
-    def _make_adj_btn(self, text: str, tooltip: str) -> QPushButton:
-        btn = QPushButton(text)
-        btn.setToolTip(tooltip)
+        self.retranslate_ui()
+
+    def retranslate_ui(self) -> None:
+        self._btn_step_back.setToolTip(tr("tt_step_back"))
+        self._btn_play.setToolTip(tr("tt_play"))
+        self._btn_step_fwd.setToolTip(tr("tt_step_fwd"))
+        self._vol_slider.setToolTip(tr("tt_volume"))
+        self._zoom_hint.setText(tr("zoom_hint"))
+        self._cur_label.setText(tr("cursor_adj_label"))
+
+        adj_buttons = [
+            (self._btn_m1s,  "btn_m1s",  "tt_m1s"),
+            (self._btn_m100, "btn_m100", "tt_m100"),
+            (self._btn_m10,  "btn_m10",  "tt_m10"),
+            (self._btn_p10,  "btn_p10",  "tt_p10"),
+            (self._btn_p100, "btn_p100", "tt_p100"),
+            (self._btn_p1s,  "btn_p1s",  "tt_p1s"),
+        ]
+        for btn, text_key, tip_key in adj_buttons:
+            btn.setText(tr(text_key))
+            btn.setToolTip(tr(tip_key))
+
+        self._btn_in.setText(tr("btn_in"))
+        self._btn_in.setToolTip(tr("tt_btn_in"))
+        self._btn_out.setText(tr("btn_out"))
+        self._btn_out.setToolTip(tr("tt_btn_out"))
+        self._btn_add.setText(tr("btn_add_seg"))
+        self._btn_add.setToolTip(tr("tt_btn_add"))
+
+        self._in_lbl.setText(tr("lbl_in"))
+        self._out_lbl.setText(tr("lbl_out"))
+        self._dur_lbl.setText(tr("lbl_dur"))
+
+    def _make_adj_btn(self) -> QPushButton:
+        btn = QPushButton()
         btn.setFixedWidth(54)
         btn.setFixedHeight(22)
         btn.setStyleSheet("font-size: 10px;")

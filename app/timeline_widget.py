@@ -2,6 +2,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QCursor
 from PyQt6.QtWidgets import QWidget, QMenu, QApplication
 
+from .i18n import tr
 from .utils import Segment, format_display_time
 
 
@@ -133,7 +134,7 @@ class TimelineWidget(QWidget):
 
         if self._duration_ms <= 0:
             painter.setPen(QColor(100, 100, 100))
-            painter.drawText(0, 0, w, h, Qt.AlignmentFlag.AlignCenter, "ファイルを開いてください")
+            painter.drawText(0, 0, w, h, Qt.AlignmentFlag.AlignCenter, tr("tl_open_hint"))
             return
 
         # Ruler background
@@ -293,25 +294,25 @@ class TimelineWidget(QWidget):
         ms = self._x_to_ms(pos.x())
         menu = QMenu(self)
 
-        menu.addAction(f"イン点をここに設定  [{format_display_time(ms)}]",
+        menu.addAction(tr("tl_ctx_set_in").format(time=format_display_time(ms)),
                        lambda: self.inPointChanged.emit(ms))
-        menu.addAction(f"アウト点をここに設定  [{format_display_time(ms)}]",
+        menu.addAction(tr("tl_ctx_set_out").format(time=format_display_time(ms)),
                        lambda: self.outPointChanged.emit(ms))
         menu.addSeparator()
 
         can_add = self._in_point_ms >= 0 and self._out_point_ms > self._in_point_ms
-        act = menu.addAction("セグメントを追加 (イン→アウト)", self.segmentAddRequested)
+        act = menu.addAction(tr("tl_ctx_add_seg"), self.segmentAddRequested)
         act.setEnabled(can_add)
 
         if self._zoom > 1.0:
             menu.addSeparator()
-            menu.addAction("ズームをリセット (ダブルクリックでも可)", self._reset_zoom)
+            menu.addAction(tr("tl_ctx_reset_zoom"), self._reset_zoom)
 
         clicked_seg_idx = self._segment_at(ms)
         if clicked_seg_idx >= 0:
             menu.addSeparator()
             menu.addAction(
-                f"セグメント {clicked_seg_idx + 1} を削除",
+                tr("tl_ctx_remove_seg").format(n=clicked_seg_idx + 1),
                 lambda idx=clicked_seg_idx: self.segmentRemoveRequested.emit(idx),
             )
 
