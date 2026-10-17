@@ -131,6 +131,7 @@ class TransportControls(QWidget):
 
         self._in_ms:  int = -1
         self._out_ms: int = -1
+        self._position_ms: int = 0
 
         row2.addWidget(self._cur_label)
         row2.addWidget(self._btn_m1s)
@@ -206,6 +207,8 @@ class TransportControls(QWidget):
         pos = format_display_time(position_ms)
         dur = format_display_time(duration_ms)
         self._time_label.setText(f"{pos} / {dur}")
+        self._position_ms = position_ms
+        self._update_duration()
 
     def update_in_time(self, ms: int) -> None:
         self._in_ms = ms
@@ -218,8 +221,19 @@ class TransportControls(QWidget):
         self._update_duration()
 
     def _update_duration(self) -> None:
-        if self._in_ms >= 0 and self._out_ms >= 0 and self._out_ms > self._in_ms:
+        has_in = self._in_ms >= 0
+        has_out = self._out_ms >= 0
+        if has_in and has_out and self._out_ms > self._in_ms:
+            # Both points set: show the selected segment's length.
             self._dur_label.setText(_ms_precise(self._out_ms - self._in_ms))
+        elif has_in and not has_out:
+            # Only the in point is set: show its gap to the current cursor
+            # (positive while the cursor has moved past the in point).
+            self._dur_label.setText(_ms_precise(self._position_ms - self._in_ms))
+        elif has_out and not has_in:
+            # Only the out point is set: show its gap to the current cursor
+            # (positive while the cursor is still before the out point).
+            self._dur_label.setText(_ms_precise(self._out_ms - self._position_ms))
         else:
             self._dur_label.setText("--:--.---")
 
@@ -228,6 +242,8 @@ class TransportControls(QWidget):
 
 
 def _ms_precise(ms: int) -> str:
+    sign = "-" if ms < 0 else ""
+    ms = abs(ms)
     total_s = ms // 1000
     millis = ms % 1000
-    return f"{total_s // 60:02d}:{total_s % 60:02d}.{millis:03d}"
+    return f"{sign}{total_s // 60:02d}:{total_s % 60:02d}.{millis:03d}"
