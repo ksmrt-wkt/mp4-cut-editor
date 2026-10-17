@@ -341,9 +341,12 @@ class TimelineWidget(QWidget):
                        lambda: self.outPointChanged.emit(ms))
         menu.addSeparator()
 
-        can_add = self._in_point_ms >= 0 and self._out_point_ms > self._in_point_ms
-        act = menu.addAction(tr("tl_ctx_add_seg"), self.segmentAddRequested)
-        act.setEnabled(can_add)
+        if self._editing_segment_index >= 0:
+            menu.addAction(tr("tl_ctx_finish_edit"), self.segmentAddRequested)
+        else:
+            can_add = self._in_point_ms >= 0 and self._out_point_ms > self._in_point_ms
+            act = menu.addAction(tr("tl_ctx_add_seg"), self.segmentAddRequested)
+            act.setEnabled(can_add)
 
         if self._zoom > 1.0:
             menu.addSeparator()

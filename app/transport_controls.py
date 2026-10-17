@@ -132,6 +132,7 @@ class TransportControls(QWidget):
         self._in_ms:  int = -1
         self._out_ms: int = -1
         self._position_ms: int = 0
+        self._editing: bool = False
 
         row2.addWidget(self._cur_label)
         row2.addWidget(self._btn_m1s)
@@ -182,8 +183,7 @@ class TransportControls(QWidget):
         self._btn_in.setToolTip(tr("tt_btn_in"))
         self._btn_out.setText(tr("btn_out"))
         self._btn_out.setToolTip(tr("tt_btn_out"))
-        self._btn_add.setText(tr("btn_add_seg"))
-        self._btn_add.setToolTip(tr("tt_btn_add"))
+        self._update_add_button()
 
         self._in_lbl.setText(tr("lbl_in"))
         self._out_lbl.setText(tr("lbl_out"))
@@ -209,6 +209,22 @@ class TransportControls(QWidget):
         self._time_label.setText(f"{pos} / {dur}")
         self._position_ms = position_ms
         self._update_duration()
+
+    def set_editing_mode(self, editing: bool) -> None:
+        """Relabel the Add-Segment button to "Finish Editing" while an
+        existing segment is being live-edited."""
+        self._editing = editing
+        self._update_add_button()
+
+    def _update_add_button(self) -> None:
+        if self._editing:
+            self._btn_add.setText(tr("btn_finish_edit"))
+            self._btn_add.setToolTip(tr("tt_btn_finish_edit"))
+            self._btn_add.setStyleSheet("color: #5AAEE8; font-size: 11px;")
+        else:
+            self._btn_add.setText(tr("btn_add_seg"))
+            self._btn_add.setToolTip(tr("tt_btn_add"))
+            self._btn_add.setStyleSheet("color: #50A050; font-size: 11px;")
 
     def update_in_time(self, ms: int) -> None:
         self._in_ms = ms

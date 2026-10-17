@@ -218,7 +218,8 @@ class MainWindow(QMainWindow):
         edit_menu = menubar.addMenu(tr("menu_edit"))
         edit_menu.addAction(tr("menu_set_in"), self._set_in_at_current)
         edit_menu.addAction(tr("menu_set_out"), self._set_out_at_current)
-        edit_menu.addAction(tr("menu_add_segment"), self._add_segment)
+        add_seg_text = tr("menu_finish_edit") if self._editing_segment_index >= 0 else tr("menu_add_segment")
+        self._add_segment_action = edit_menu.addAction(add_seg_text, self._add_segment)
         edit_menu.addSeparator()
         edit_menu.addAction(tr("menu_clear_segments"), self._clear_segments)
 
@@ -565,7 +566,9 @@ class MainWindow(QMainWindow):
         self._timeline.set_editing_index(index)
         self._transport.update_in_time(seg.start_ms)
         self._transport.update_out_time(seg.end_ms)
+        self._transport.set_editing_mode(True)
         self._segment_list.set_editing_index(index)
+        self._add_segment_action.setText(tr("menu_finish_edit"))
         self._update_status()
 
     def _stop_editing_segment(self) -> None:
@@ -578,7 +581,9 @@ class MainWindow(QMainWindow):
         self._timeline.set_editing_index(-1)
         self._transport.update_in_time(-1)
         self._transport.update_out_time(-1)
+        self._transport.set_editing_mode(False)
         self._segment_list.set_editing_index(-1)
+        self._add_segment_action.setText(tr("menu_add_segment"))
         self._update_status()
 
     def _add_segment(self):
