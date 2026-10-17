@@ -10,6 +10,9 @@ from .utils import Segment, format_display_time
 
 class SegmentList(QWidget):
     segmentRemoveRequested = pyqtSignal(int)  # index
+    segmentSelected = pyqtSignal(int)         # index (row clicked, not the Del button)
+
+    DEL_COLUMN = 3
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -29,10 +32,12 @@ class SegmentList(QWidget):
         self._table.setColumnWidth(3, 52)
         self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self._table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._table.setAlternatingRowColors(True)
         self._table.verticalHeader().setVisible(False)
         self._table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._table.setMinimumWidth(260)
+        self._table.cellClicked.connect(self._on_cell_clicked)
         layout.addWidget(self._table)
 
         self._total_label = QLabel()
@@ -40,7 +45,21 @@ class SegmentList(QWidget):
         layout.addWidget(self._total_label)
 
         self._segments: list[Segment] = []
+        self._editing_index: int = -1
         self.retranslate_ui()
+
+    def _on_cell_clicked(self, row: int, column: int) -> None:
+        if column == self.DEL_COLUMN:
+            return  # handled by the row's own "Del" button
+        self.segmentSelected.emit(row)
+
+    def set_editing_index(self, index: int) -> None:
+        """Highlight the row being edited (-1 = none)."""
+        self._editing_index = index
+        if 0 <= index < self._table.rowCount():
+            self._table.selectRow(index)
+        else:
+            self._table.clearSelection()
 
     def retranslate_ui(self) -> None:
         self._header.setText(tr("seg_list_header"))
@@ -74,3 +93,6 @@ class SegmentList(QWidget):
         self._total_label.setText(
             tr("seg_total").format(n=n, time=format_display_time(total_ms))
         )
+
+        if 0 <= self._editing_index < n:
+            self._table.selectRow(self._editing_index)

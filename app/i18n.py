@@ -24,6 +24,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "status_open_hint": "ファイルを開いてください  (Ctrl+O)",
         "status_in_unset": "未設定",
         "status_out_unset": "未設定",
+        "status_editing_segment": "セグメント{n}を編集中（Escで終了）",
         # Dialogs - open file
         "dlg_open_title": "MP4ファイルを開く",
         "dlg_open_filter": "動画ファイル (*.mp4 *.MP4 *.m4v *.mov *.mkv *.avi);;全ファイル (*)",
@@ -151,6 +152,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "status_open_hint": "Open a file  (Ctrl+O)",
         "status_in_unset": "Not set",
         "status_out_unset": "Not set",
+        "status_editing_segment": "Editing segment {n} (Esc to finish)",
         # Dialogs - open file
         "dlg_open_title": "Open MP4 File",
         "dlg_open_filter": "Video Files (*.mp4 *.MP4 *.m4v *.mov *.mkv *.avi);;All Files (*)",

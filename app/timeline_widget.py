@@ -18,6 +18,8 @@ class TimelineWidget(QWidget):
     RULER_COLOR = QColor(60, 60, 60)
     SEGMENT_COLOR = QColor(50, 160, 80, 180)
     SEGMENT_BORDER = QColor(80, 200, 100)
+    EDITING_SEGMENT_COLOR = QColor(70, 140, 230, 190)
+    EDITING_SEGMENT_BORDER = QColor(130, 190, 255)
     PLAYHEAD_COLOR = QColor(255, 255, 255)
     IN_COLOR = QColor(255, 220, 50)
     OUT_COLOR = QColor(255, 220, 50)
@@ -42,6 +44,7 @@ class TimelineWidget(QWidget):
         self._in_point_ms: int = -1
         self._out_point_ms: int = -1
         self._segments: list[Segment] = []
+        self._editing_segment_index: int = -1
         self._dragging = False
         self._waveform: list[float] = []
 
@@ -72,6 +75,11 @@ class TimelineWidget(QWidget):
 
     def set_segments(self, segments: list[Segment]) -> None:
         self._segments = list(segments)
+        self.update()
+
+    def set_editing_index(self, index: int) -> None:
+        """Highlight the segment at `index` differently (-1 = none)."""
+        self._editing_segment_index = index
         self.update()
 
     def clear_in_out(self) -> None:
@@ -154,14 +162,17 @@ class TimelineWidget(QWidget):
         # Ruler ticks & labels
         self._draw_ruler(painter, w, ruler_top)
 
-        # Segments (green bars)
-        for seg in self._segments:
+        # Segments (green bars; the one being edited is highlighted blue)
+        for i, seg in enumerate(self._segments):
             x1 = self._ms_to_x(seg.start_ms)
             x2 = self._ms_to_x(seg.end_ms)
             if x2 < 0 or x1 > w:
                 continue
-            painter.fillRect(x1, track_top, max(x2 - x1, 2), track_h, self.SEGMENT_COLOR)
-            painter.setPen(QPen(self.SEGMENT_BORDER, 1))
+            is_editing = (i == self._editing_segment_index)
+            fill = self.EDITING_SEGMENT_COLOR if is_editing else self.SEGMENT_COLOR
+            border = self.EDITING_SEGMENT_BORDER if is_editing else self.SEGMENT_BORDER
+            painter.fillRect(x1, track_top, max(x2 - x1, 2), track_h, fill)
+            painter.setPen(QPen(border, 1))
             painter.drawRect(x1, track_top, max(x2 - x1, 2), track_h - 1)
 
         # In/Out range highlight

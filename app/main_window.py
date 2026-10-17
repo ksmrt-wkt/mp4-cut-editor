@@ -136,6 +136,7 @@ class MainWindow(QMainWindow):
         self._in_point_ms: int = -1
         self._out_point_ms: int = -1
         self._segments: list[Segment] = []
+        self._editing_segment_index: int = -1
 
         # Load saved language
         settings = QSettings("mp4cut", "mp4cut")
@@ -253,6 +254,7 @@ class MainWindow(QMainWindow):
         self._transport.volumeChanged.connect(self._player.set_volume)
 
         self._segment_list.segmentRemoveRequested.connect(self._remove_segment)
+        self._segment_list.segmentSelected.connect(self._start_editing_segment)
 
     # ----- Language -----
 
@@ -313,14 +315,17 @@ class MainWindow(QMainWindow):
         self._segments.clear()
         self._in_point_ms = -1
         self._out_point_ms = -1
+        self._editing_segment_index = -1
 
         self._player.load(path)
         self._timeline.set_duration(info.duration_ms)
         self._timeline.set_segments([])
         self._timeline.clear_in_out()
+        self._timeline.set_editing_index(-1)
         self._transport.update_in_time(-1)
         self._transport.update_out_time(-1)
         self._segment_list.update_segments([])
+        self._segment_list.set_editing_index(-1)
         self._export_action.setEnabled(True)
         self._save_project_action.setEnabled(True)
 
@@ -381,10 +386,12 @@ class MainWindow(QMainWindow):
         self._segments = [Segment(s["start_ms"], s["end_ms"]) for s in data.get("segments", [])]
         self._in_point_ms = data.get("in_point_ms", -1)
         self._out_point_ms = data.get("out_point_ms", -1)
+        self._editing_segment_index = -1
 
         self._player.load(source)
         self._timeline.set_duration(info.duration_ms)
         self._timeline.set_segments(self._segments)
+        self._timeline.set_editing_index(-1)
         if self._in_point_ms >= 0:
             self._timeline.set_in_point(self._in_point_ms)
         else:
@@ -394,6 +401,7 @@ class MainWindow(QMainWindow):
         self._transport.update_in_time(self._in_point_ms)
         self._transport.update_out_time(self._out_point_ms)
         self._segment_list.update_segments(self._segments)
+        self._segment_list.set_editing_index(-1)
         self._export_action.setEnabled(True)
         self._save_project_action.setEnabled(True)
 
@@ -492,12 +500,36 @@ class MainWindow(QMainWindow):
         self._set_out_point(self._player.position())
 
     def _set_in_point(self, ms: int):
+        if self._editing_segment_index >= 0:
+            seg = self._segments[self._editing_segment_index]
+            if ms >= seg.end_ms:
+                QMessageBox.warning(self, tr("warn_range_error_title"), tr("warn_range_error"))
+                return
+            if self._segment_overlaps(ms, seg.end_ms, exclude_index=self._editing_segment_index):
+                QMessageBox.warning(self, tr("warn_overlap_title"), tr("warn_overlap"))
+                return
+            seg.start_ms = ms
+            self._timeline.set_segments(self._segments)
+            self._segment_list.update_segments(self._segments)
+
         self._in_point_ms = ms
         self._timeline.set_in_point(ms)
         self._transport.update_in_time(ms)
         self._update_status()
 
     def _set_out_point(self, ms: int):
+        if self._editing_segment_index >= 0:
+            seg = self._segments[self._editing_segment_index]
+            if ms <= seg.start_ms:
+                QMessageBox.warning(self, tr("warn_range_error_title"), tr("warn_range_error"))
+                return
+            if self._segment_overlaps(seg.start_ms, ms, exclude_index=self._editing_segment_index):
+                QMessageBox.warning(self, tr("warn_overlap_title"), tr("warn_overlap"))
+                return
+            seg.end_ms = ms
+            self._timeline.set_segments(self._segments)
+            self._segment_list.update_segments(self._segments)
+
         self._out_point_ms = ms
         self._timeline.set_out_point(ms)
         self._transport.update_out_time(ms)
@@ -510,21 +542,63 @@ class MainWindow(QMainWindow):
 
     # ----- Segments -----
 
+    def _segment_overlaps(self, start_ms: int, end_ms: int, exclude_index: int = -1) -> bool:
+        for i, seg in enumerate(self._segments):
+            if i == exclude_index:
+                continue
+            if not (end_ms <= seg.start_ms or start_ms >= seg.end_ms):
+                return True
+        return False
+
+    def _start_editing_segment(self, index: int) -> None:
+        """Load an existing segment's Start/End onto the In/Out points so
+        the usual I/O keys, +/- nudge buttons and timeline context menu
+        adjust that segment directly (live) instead of staging a new one."""
+        if not (0 <= index < len(self._segments)):
+            return
+        self._editing_segment_index = index
+        seg = self._segments[index]
+        self._in_point_ms = seg.start_ms
+        self._out_point_ms = seg.end_ms
+        self._timeline.set_in_point(seg.start_ms)
+        self._timeline.set_out_point(seg.end_ms)
+        self._timeline.set_editing_index(index)
+        self._transport.update_in_time(seg.start_ms)
+        self._transport.update_out_time(seg.end_ms)
+        self._segment_list.set_editing_index(index)
+        self._update_status()
+
+    def _stop_editing_segment(self) -> None:
+        if self._editing_segment_index < 0:
+            return
+        self._editing_segment_index = -1
+        self._in_point_ms = -1
+        self._out_point_ms = -1
+        self._timeline.clear_in_out()
+        self._timeline.set_editing_index(-1)
+        self._transport.update_in_time(-1)
+        self._transport.update_out_time(-1)
+        self._segment_list.set_editing_index(-1)
+        self._update_status()
+
     def _add_segment(self):
+        if self._editing_segment_index >= 0:
+            # "Add Segment" doubles as "finish editing" while editing: the
+            # In/Out tools already apply changes to the segment live.
+            self._stop_editing_segment()
+            return
+
         if self._in_point_ms < 0 or self._out_point_ms < 0:
             QMessageBox.warning(self, tr("warn_no_inout_title"), tr("warn_no_inout"))
             return
         if self._out_point_ms <= self._in_point_ms:
             QMessageBox.warning(self, tr("warn_range_error_title"), tr("warn_range_error"))
             return
+        if self._segment_overlaps(self._in_point_ms, self._out_point_ms):
+            QMessageBox.warning(self, tr("warn_overlap_title"), tr("warn_overlap"))
+            return
 
         new_seg = Segment(self._in_point_ms, self._out_point_ms)
-
-        for seg in self._segments:
-            if not (new_seg.end_ms <= seg.start_ms or new_seg.start_ms >= seg.end_ms):
-                QMessageBox.warning(self, tr("warn_overlap_title"), tr("warn_overlap"))
-                return
-
         self._segments.append(new_seg)
         self._segments.sort(key=lambda s: s.start_ms)
 
@@ -540,8 +614,14 @@ class MainWindow(QMainWindow):
     def _remove_segment(self, index: int):
         if 0 <= index < len(self._segments):
             self._segments.pop(index)
+            if self._editing_segment_index == index:
+                self._stop_editing_segment()
+            elif self._editing_segment_index > index:
+                self._editing_segment_index -= 1
             self._timeline.set_segments(self._segments)
+            self._timeline.set_editing_index(self._editing_segment_index)
             self._segment_list.update_segments(self._segments)
+            self._segment_list.set_editing_index(self._editing_segment_index)
             self._update_status()
 
     def _clear_segments(self):
@@ -551,6 +631,7 @@ class MainWindow(QMainWindow):
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             self._segments.clear()
+            self._stop_editing_segment()
             self._timeline.set_segments([])
             self._segment_list.update_segments([])
             self._update_status()
@@ -599,10 +680,14 @@ class MainWindow(QMainWindow):
         total_ms = sum(s.duration_ms for s in self._segments)
         in_str = format_display_time(self._in_point_ms) if self._in_point_ms >= 0 else tr("status_in_unset")
         out_str = format_display_time(self._out_point_ms) if self._out_point_ms >= 0 else tr("status_out_unset")
-        self._status_label.setText(
+        text = (
             f"{fname}  |  {n} / {format_display_time(total_ms)}  "
             f"|  In: {in_str}  Out: {out_str}"
         )
+        if self._editing_segment_index >= 0:
+            editing = tr("status_editing_segment").format(n=self._editing_segment_index + 1)
+            text = f"{editing}  |  {text}"
+        self._status_label.setText(text)
 
     # ----- Keyboard shortcuts -----
 
@@ -637,5 +722,7 @@ class MainWindow(QMainWindow):
             self._save_project()
         elif key == Qt.Key.Key_E and mod & Qt.KeyboardModifier.ControlModifier:
             self._export()
+        elif key == Qt.Key.Key_Escape:
+            self._stop_editing_segment()
         else:
             super().keyPressEvent(event)
