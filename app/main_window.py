@@ -21,6 +21,14 @@ from .utils import Segment, VideoInfo, format_display_time
 from . import ffmpeg_runner
 
 
+def _app_settings() -> QSettings:
+    """Settings store for this app, as a plain INI file under the user's
+    per-app config directory (e.g. %APPDATA%\\mp4cut\\mp4cut.ini on
+    Windows) instead of the platform-native store (the Windows registry).
+    """
+    return QSettings(QSettings.Format.IniFormat, QSettings.Scope.UserScope, "mp4cut", "mp4cut")
+
+
 class SplitExportDialog(QDialog):
     def __init__(self, default_dir: str = "", parent=None):
         super().__init__(parent)
@@ -139,7 +147,7 @@ class MainWindow(QMainWindow):
         self._editing_segment_index: int = -1
 
         # Load saved language
-        settings = QSettings("mp4cut", "mp4cut")
+        settings = _app_settings()
         saved_lang = settings.value("language", "en")
         set_language(saved_lang)
 
@@ -261,7 +269,7 @@ class MainWindow(QMainWindow):
 
     def _set_language(self, lang: str) -> None:
         set_language(lang)
-        QSettings("mp4cut", "mp4cut").setValue("language", lang)
+        _app_settings().setValue("language", lang)
         self.retranslate_ui()
 
     def retranslate_ui(self) -> None:

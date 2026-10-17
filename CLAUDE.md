@@ -28,7 +28,7 @@ There is no test suite, linter config, or build/packaging script in the repo. Th
   - Temp files go in `tempfile.mkdtemp(prefix="mp4cut_")` and are removed in `finally`.
   - `extract_waveform()` decodes mono 8 kHz f32 audio to compute normalized RMS bins for the timeline.
 - `app/utils.py` — `Segment` / `VideoInfo` dataclasses and time formatting. All times throughout the app are **integer milliseconds**.
-- `app/i18n.py` — in-code string table (`_STRINGS["ja"]`, `_STRINGS["en"]`) with `tr(key)`; falls back to `ja`, then the key. Language is persisted in `QSettings("mp4cut", "mp4cut")`. Switching language calls `MainWindow.retranslate_ui()`, which rebuilds the menu and calls each widget's `retranslate_ui()`.
+- `app/i18n.py` — in-code string table (`_STRINGS["ja"]`, `_STRINGS["en"]`) with `tr(key)`; falls back to `ja`, then the key. Language is persisted via `MainWindow._app_settings()`, a `QSettings` opened with `IniFormat`/`UserScope` (an INI file under the user's per-app config dir, e.g. `%APPDATA%\mp4cut\mp4cut.ini` on Windows) rather than the platform-native store (the Windows registry) — use that helper for any new persisted setting instead of constructing `QSettings` directly. Switching language calls `MainWindow.retranslate_ui()`, which rebuilds the menu and calls each widget's `retranslate_ui()`.
   - Every user-visible string (including ffmpeg_runner error messages) goes through `tr()`; add new keys to **both** `ja` and `en`, and if a widget shows text, make sure its `retranslate_ui()` refreshes it.
 - Project files (`.mp4cut`) are JSON written by `MainWindow._save_project`: `{"version": 1, "source_path", "in_point_ms", "out_point_ms", "segments": [{"start_ms", "end_ms"}]}`. Bump `version` if the schema changes.
 
