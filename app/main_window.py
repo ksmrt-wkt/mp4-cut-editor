@@ -180,7 +180,16 @@ class MainWindow(QMainWindow):
         splitter.addWidget(bottom)
         splitter.setStretchFactor(0, 4)
         splitter.setStretchFactor(1, 0)
-        splitter.setStretchFactor(2, 1)
+        splitter.setStretchFactor(2, 0)
+
+        # Start the controller pane (transport + segment list) at its
+        # minimum height rather than letting it claim a share of the
+        # window's initial extra space; the user can still drag the
+        # splitter handle to make it taller. The oversized first value is
+        # a standard QSplitter idiom: setSizes() clamps each pane to its
+        # actual minimum, so "give the player everything, the controller
+        # as little as possible" doesn't need hardcoded pixel heights.
+        splitter.setSizes([10_000, 110, 1])
 
         root.addWidget(splitter)
 
