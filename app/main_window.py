@@ -603,6 +603,10 @@ class MainWindow(QMainWindow):
 
         if key == Qt.Key.Key_Space:
             self._player.toggle_play()
+        elif key == Qt.Key.Key_O and mod & Qt.KeyboardModifier.ControlModifier and mod & Qt.KeyboardModifier.ShiftModifier:
+            self._load_project()
+        elif key == Qt.Key.Key_O and mod & Qt.KeyboardModifier.ControlModifier:
+            self._open_file()
         elif key == Qt.Key.Key_I:
             self._set_in_at_current()
         elif key == Qt.Key.Key_O:
@@ -620,10 +624,6 @@ class MainWindow(QMainWindow):
                 self._player.seek(min(dur, self._player.position() + 5000))
             else:
                 self._step_forward()
-        elif key == Qt.Key.Key_O and mod & Qt.KeyboardModifier.ControlModifier and mod & Qt.KeyboardModifier.ShiftModifier:
-            self._load_project()
-        elif key == Qt.Key.Key_O and mod & Qt.KeyboardModifier.ControlModifier:
-            self._open_file()
         elif key == Qt.Key.Key_S and mod & Qt.KeyboardModifier.ControlModifier:
             self._save_project()
         elif key == Qt.Key.Key_E and mod & Qt.KeyboardModifier.ControlModifier:
