@@ -34,6 +34,6 @@ There is no test suite, linter config, or build/packaging script in the repo. Th
 
 ## Conventions
 
-- UI default language is Japanese; code comments and commit messages are in English.
+- UI default language is English (`app/i18n.py`'s `_lang` and `MainWindow`'s `QSettings` fallback both default to `"en"`); code comments and commit messages are in English.
 - Source files are LF (enforced by `.gitattributes`: `* text=auto eol=lf`). On Windows, `core.autocrlf=true` can make a couple of files *look* CRLF in the working tree without git considering them modified — that's a local checkout artifact, not a real inconsistency; don't "fix" it with a commit.
 - `.claude/` is gitignored, so editor/agent config there is local-only.

@@ -267,7 +267,7 @@ _STRINGS: dict[str, dict[str, str]] = {
     },
 }
 
-_lang: str = "ja"
+_lang: str = "en"
 
 
 def set_language(lang: str) -> None:

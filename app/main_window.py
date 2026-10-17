@@ -140,7 +140,7 @@ class MainWindow(QMainWindow):
 
         # Load saved language
         settings = QSettings("mp4cut", "mp4cut")
-        saved_lang = settings.value("language", "ja")
+        saved_lang = settings.value("language", "en")
         set_language(saved_lang)
 
         self._build_ui()
