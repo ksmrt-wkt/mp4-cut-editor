@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -102,7 +103,12 @@ def find_keyframes_in_range(source_path: str, ffprobe: str,
         parts = line.strip().split(",")
         if len(parts) >= 2 and parts[1].strip() == "I":
             try:
-                keyframes.append(int(float(parts[0]) * 1000))
+                # Round up (never down): a truncated ms value that falls a
+                # fraction before the keyframe's true PTS makes ffmpeg's
+                # input-side "-ss" (used for stream copy) seek backward to
+                # the *previous* keyframe instead of this one, silently
+                # prepending extra footage to the exported segment.
+                keyframes.append(math.ceil(float(parts[0]) * 1000))
             except ValueError:
                 pass
     return sorted(set(keyframes))
