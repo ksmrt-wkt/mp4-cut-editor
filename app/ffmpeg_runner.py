@@ -1,5 +1,4 @@
 import json
-import math
 import os
 import shutil
 import subprocess
@@ -103,12 +102,15 @@ def find_keyframes_in_range(source_path: str, ffprobe: str,
         parts = line.strip().split(",")
         if len(parts) >= 2 and parts[1].strip() == "I":
             try:
-                # Round up (never down): a truncated ms value that falls a
-                # fraction before the keyframe's true PTS makes ffmpeg's
-                # input-side "-ss" (used for stream copy) seek backward to
-                # the *previous* keyframe instead of this one, silently
-                # prepending extra footage to the exported segment.
-                keyframes.append(math.ceil(float(parts[0]) * 1000))
+                # Truncate (never round up) to milliseconds: this value is
+                # also used as the re-encode "-ss" for the TAIL part
+                # (accurate seek), which discards any frame whose PTS is
+                # *before* the requested time. Overshooting past the
+                # keyframe's true PTS there would discard the keyframe
+                # itself. See the seek-nudge comment in _stream_copy for the
+                # opposite (stream-copy) case, which needs the opposite
+                # rounding direction and is handled separately.
+                keyframes.append(int(float(parts[0]) * 1000))
             except ValueError:
                 pass
     return sorted(set(keyframes))
@@ -129,11 +131,24 @@ def _run(cmd: list[str], label: str, timeout: int = 600) -> None:
 
 
 def _stream_copy(ffmpeg: str, source: str, start_ms: int, end_ms: int, out: str) -> None:
-    """Stream-copy a keyframe-aligned range (start must be a keyframe)."""
+    """Stream-copy a keyframe-aligned range (start must be a keyframe).
+
+    `start_ms` is a keyframe timestamp truncated to the millisecond (see
+    find_keyframes_in_range), i.e. it can be up to ~1ms *before* the
+    keyframe's true PTS. For -c copy, ffmpeg's input "-ss" seeks to the
+    nearest keyframe at-or-before the requested time, so passing the
+    truncated value as-is risks undershooting onto the *previous* keyframe
+    (which can be seconds earlier depending on GOP spacing). Nudge the seek
+    target forward by a small, GOP-spacing-safe margin to land on the
+    intended keyframe instead. The nudge only affects where we seek to,
+    not the copied duration, which is still computed from the true
+    (un-nudged) boundaries.
+    """
+    SEEK_NUDGE_MS = 2
     duration_ms = end_ms - start_ms
     _run([
         ffmpeg, "-y",
-        "-ss", ms_to_timestamp(start_ms),   # input: fast seek to keyframe
+        "-ss", ms_to_timestamp(start_ms + SEEK_NUDGE_MS),  # input: fast seek to keyframe
         "-i", source,
         "-t", ms_to_timestamp(duration_ms),  # output: duration (more precise than -to)
         "-c", "copy",
